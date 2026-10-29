@@ -1,0 +1,15 @@
+{
+  "name": "levelfitness-sistema-inferencia",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sistema de inferencia granular del sistema experto de Level Fitness: 5 hipótesis con peso probabilístico, código OO en tres capas",
+  "scripts": {
+    "demo": "tsx demo/demo.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
