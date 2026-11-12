@@ -2,11 +2,64 @@
 
 Diseño e implementación del sistema de inferencia del sistema experto de recomendación de suplementos de [Level Fitness](https://www.levelfitness.co). A partir de las respuestas del usuario, el sistema identifica las **5 hipótesis** (familias de producto) más probables con su **peso probabilístico**, consultando la base de conocimiento **de forma granular y sucesiva**: cada hecho conocido o deducido provoca una consulta a PostgreSQL que trae solo las reglas que lo mencionan. El conocimiento vive en la base de datos, no en condicionales del código.
 
-**Entregables**
+**Aplicación en producción:** https://www.levelfitness.co/asesor
 
-1. [Diagrama de caja negra](#1-diagrama-de-caja-negra)
-2. [Diagrama de flujo de datos (niveles 0 y 1)](#2-diagrama-de-flujo-de-datos)
-3. [Código fuente orientado a objetos en tres capas](#3-código-fuente-oo-en-tres-capas)
+**Contenido**
+
+1. [Código fuente del sistema experto completo](#código-fuente-del-sistema-experto-completo)
+2. [Diagrama de clases DAO y modelos de datos](#diagrama-de-clases-dao-y-modelos-de-datos)
+3. [Diagrama de caja negra](#1-diagrama-de-caja-negra)
+4. [Diagrama de flujo de datos (niveles 0 y 1)](#2-diagrama-de-flujo-de-datos)
+5. [Código fuente orientado a objetos en tres capas del sistema de inferencia](#3-código-fuente-oo-en-tres-capas)
+
+---
+
+## Código fuente del sistema experto completo
+
+Este repositorio contiene todo el código del sistema experto, extraído de la tienda Level Fitness (Medusa v2 + Next.js 15). La carpeta `src/` corresponde al backend y `storefront/` a la vitrina.
+
+```
+src/
+├── modules/expert/
+│   ├── models/expert.ts            Modelo de datos: base de conocimiento (5 entidades) y registro de consultas (2)
+│   ├── migrations/                 Migración que crea las tablas expert_* en PostgreSQL
+│   ├── service.ts                  ExpertModuleService: DAO generado por MedusaService (list/create/update/delete)
+│   ├── index.ts                    Registro del módulo en Medusa
+│   ├── knowledge/base.ts           Conocimiento del experto humano: 24 variables, 19 hipótesis, 127 reglas
+│   ├── engine.ts                   Motor de inferencia: encadenamiento hacia adelante + factores de certeza MYCIN
+│   ├── advisor.ts                  Validación, recomendación de productos dentro del presupuesto y registro de la consulta
+│   └── inference/                  Sistema de inferencia granular en tres capas (ver sección 3)
+├── migration-scripts/              Carga del conocimiento durante el despliegue (v1 y v2)
+├── scripts/seed-expert-knowledge.ts  Carga idempotente del conocimiento (npm run seed:expert)
+├── api/store/expert/               API pública: preguntas, consulta, calificación e inferencia granular
+├── api/admin/expert/               API de administración: reglas, hipótesis, conocimiento, consultas y prueba del motor
+└── admin/routes/expert/page.tsx    Página «Sistema experto» del panel de administración (adquisición del conocimiento)
+storefront/src/
+├── app/asesor/page.tsx             Página del asesor
+├── features/expert/expert-advisor.tsx  Cuestionario, resultados explicados, carrito y calificación
+├── services/expert.ts              Cliente de la API del asesor
+└── components/layout/assistant-widget.tsx  Botón flotante: test del asesor o WhatsApp
+base-de-datos/
+├── modelo-relacional.sql           DDL exportado con pg_dump: base de conocimiento y registro de consultas
+├── modelo-relacional-transaccional.sql  DDL exportado con pg_dump: proceso de compra (15 tablas)
+└── consultas-granulos.sql          Consultas de gránulos de conocimiento por hipótesis (Q1–Q6)
+```
+
+Los archivos de `src/` y `storefront/` necesitan el proyecto Medusa y Next.js de la tienda para ejecutarse; la [demostración](#ejecutar-la-demostración) corre sola, sin base de datos.
+
+## Diagrama de clases DAO y modelos de datos
+
+Acceso a datos con el patrón Data Access Object (Core J2EE Patterns): los objetos de negocio usan DAO que encapsulan PostgreSQL y devuelven objetos de transferencia.
+
+![Diagrama de clases DAO](diagramas/dao.png)
+
+Modelo entidad-relación del proceso de compra (líneas negras: llaves foráneas; grises: enlaces entre módulos de Medusa):
+
+![Modelo E-R transaccional](diagramas/er-transaccional.png)
+
+Mapa de procesos de Level Fitness:
+
+![Mapa de procesos](diagramas/mapa-procesos.png)
 
 ---
 
