@@ -8,7 +8,12 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["demo", "src/modules/expert"],
+  "include": [
+    "demo",
+    "src/modules/expert/engine.ts",
+    "src/modules/expert/knowledge",
+    "src/modules/expert/inference"
+  ],
   "exclude": [
     "src/modules/expert/inference/index.ts"
   ]
