@@ -50,11 +50,13 @@ Los archivos de `src/` y `storefront/` necesitan el proyecto Medusa y Next.js de
 
 ## Árbol de decisión
 
-Muestra el flujo que sigue el sistema experto: el nodo raíz y los nodos de decisión son preguntas (recuadros verdes), cada rama lleva la respuesta y termina en la siguiente pregunta o en una hoja con la conclusión del motor y su factor de certeza (naranja: incluye aviso médico). Tiene 33 ramas; las ramas de un nodo se evalúan de arriba abajo.
+El árbol sigue exactamente el cuestionario de la web: la raíz es la pregunta 1, «¿Cuál es tu objetivo principal?», con sus 6 respuestas; cada respuesta se ramifica en todas las respuestas de la pregunta siguiente, hasta la pregunta 14 (condiciones de salud), y cada camino termina en la conclusión del sistema experto. Las preguntas numéricas se ramifican en los rangos que distinguen las reglas (edad, IMC, días y duración). En total son **13.856.832 caminos** (6 × 2 × 3 × 4 × 3 × 3 × 3 × 4 × 3 × 3 × 3 × 3 × 11).
 
-![Árbol de decisión: salud, ganar masa y bajar grasa](diagramas/arbol-decision-1.png)
+**Árbol completo interactivo:** [`arbol-decision.html`](arbol-decision.html). Descárgalo y ábrelo en el navegador: al hacer clic en una pregunta se abren todas sus respuestas, se puede acercar y alejar, y cada camino muestra la conclusión calculada con el mismo motor y las 127 reglas.
 
-![Árbol de decisión: subárboles A a D](diagramas/arbol-decision-2.png)
+Estructura del árbol (una columna por pregunta, todas sus respuestas y el camino del perfil de ejemplo resaltado):
+
+![Estructura del árbol de decisión](diagramas/arbol-decision-estructura.png)
 
 ## Diagrama de clases DAO y modelos de datos
 

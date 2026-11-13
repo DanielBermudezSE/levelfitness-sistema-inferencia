@@ -1,0 +1,479 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body>
+<title>Árbol de decisión del asesor Level Fitness</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* Layout: cabecera breve, lienzo del árbol con zoom a la izquierda y panel para seguir un camino a la derecha. */
+:root {
+  --bg: #f4f6f2; --surface: #ffffff; --ink: #17201b; --muted: #5b6a61; --line: #d3dcd5;
+  --accent: #1f6f4a; --accent-soft: #e2f0e7; --path: #9fd14a;
+  --warn: #9a4a07; --warn-soft: #fcefdc; --bad: #a8261c; --bad-soft: #fbe7e5;
+  --display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --text: "Inter", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1411; --surface: #172019; --ink: #e6ede8; --muted: #9babA1; --line: #2c3a31;
+  --accent: #62c792; --accent-soft: #1b3326; --path: #9fd14a;
+  --warn: #f0a85e; --warn-soft: #3a2917; --bad: #f08a7e; --bad-soft: #3b1f1c; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f1411; --surface: #172019; --ink: #e6ede8; --muted: #9babA1; --line: #2c3a31;
+  --accent: #62c792; --accent-soft: #1b3326; --path: #9fd14a;
+  --warn: #f0a85e; --warn-soft: #3a2917; --bad: #f08a7e; --bad-soft: #3b1f1c; color-scheme: dark }
+* { box-sizing: border-box }
+html, body { height: 100% }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--text); font-size: 14px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 16px;
+  display: flex; flex-direction: column; gap: 12px }
+h1 { font-family: var(--display); font-size: 1.45rem; margin: 0; text-wrap: balance; letter-spacing: -.01em }
+.top { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: end; justify-content: space-between }
+.top p { margin: 4px 0 0; color: var(--muted); max-width: 78ch }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--muted); font-size: 12.5px }
+.legend span { display: inline-flex; align-items: center; gap: 6px }
+.sw { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid var(--accent); background: var(--surface) }
+.sw.ans { background: var(--accent-soft); border-color: var(--accent-soft) }
+.sw.leaf { border-color: var(--ink) } .sw.path { border-color: var(--path); border-width: 3px }
+.layout { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 12px }
+@media (max-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr) } .canvas { height: 70vh } }
+.canvas { position: relative; min-height: 420px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden }
+.toolbar { position: absolute; top: 10px; left: 10px; z-index: 5; display: flex; flex-wrap: wrap; gap: 6px }
+button { font: 600 12.5px var(--text); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; cursor: pointer }
+button:hover { border-color: var(--accent) } button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface) }
+#viewport { position: absolute; inset: 0; cursor: grab; touch-action: none }
+#viewport:active { cursor: grabbing }
+#stage { position: absolute; left: 0; top: 0; transform-origin: 0 0 }
+#links { position: absolute; left: 0; top: 0; overflow: visible }
+#links path { fill: none; stroke: var(--line); stroke-width: 1.6 }
+#links path.on { stroke: var(--path); stroke-width: 3 }
+.node { position: absolute; width: 250px; background: var(--surface); border: 1.6px solid var(--accent); border-radius: 10px; padding: 8px 10px; cursor: pointer; user-select: none }
+.node.on { box-shadow: 0 0 0 3px var(--path) }
+.node.sel { outline: 2px dashed var(--accent); outline-offset: 3px }
+.node .ans { display: inline-block; max-width: 100%; background: var(--accent-soft); color: var(--accent); font-weight: 600; font-size: 12px; border-radius: 6px; padding: 2px 7px; margin-bottom: 5px }
+.node .q { font-weight: 600; font-size: 13px }
+.node .qn { font-family: var(--display); color: var(--accent); margin-right: 4px }
+.node .meta { color: var(--muted); font-size: 11.5px; margin-top: 3px }
+.node.root { border-width: 2.4px; background: var(--accent-soft) }
+.node.leaf { width: 310px; border-color: var(--ink) }
+.node.leaf.warn { background: var(--warn-soft); border-color: var(--warn) }
+.res { margin: 4px 0 0; padding: 0; list-style: none; font-size: 12.5px; display: grid; gap: 2px }
+.res li { display: flex; justify-content: space-between; gap: 8px }
+.res .cf { font-variant-numeric: tabular-nums; font-weight: 600 }
+.res .alt { color: var(--muted) }
+.tag { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-top: 6px }
+.bad { color: var(--bad) } .warn-t { color: var(--warn); font-weight: 600 }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; overflow: auto; min-height: 0; display: flex; flex-direction: column; gap: 10px }
+.panel h2 { font-family: var(--display); font-size: 1.05rem; margin: 0 }
+.panel p { margin: 0; color: var(--muted); font-size: 12.5px }
+.field { display: grid; gap: 3px } .field label { font-size: 12px; font-weight: 600 } .field .num { color: var(--accent); font-family: var(--display); margin-right: 4px }
+select { font: 13px var(--text); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 5px 6px; width: 100% }
+.checks { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; font-size: 12.5px }
+.checks label { font-weight: 400; display: flex; gap: 5px; align-items: center }
+.card { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: var(--bg) }
+.facts { display: flex; flex-wrap: wrap; gap: 4px }
+.facts span { background: var(--accent-soft); color: var(--accent); border-radius: 6px; padding: 2px 6px; font-size: 11.5px; font-weight: 600 }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important } }
+</style>
+
+<header class="top">
+  <div>
+    <h1>Árbol de decisión del asesor experto Level Fitness</h1>
+    <p>El árbol sigue las 15 preguntas del asesor en el mismo orden que la web. Cada recuadro es una pregunta; al hacer clic se abren todas sus respuestas, y cada camino termina en la conclusión que entrega el sistema experto, calculada en esta página con el mismo motor y las 127 reglas. Las respuestas numéricas se agrupan en los rangos que usan las reglas: dentro de un rango el resultado no cambia. En total hay <strong>13.856.832 caminos completos</strong> (6 × 2 × 3 × 4 × 3 × 3 × 3 × 4 × 3 × 3 × 3 × 3 × 11).</p>
+  </div>
+  <div class="legend" aria-label="Convenciones">
+    <span><i class="sw"></i>Pregunta (clic para abrir)</span>
+    <span><i class="sw ans"></i>Respuesta elegida</span>
+    <span><i class="sw leaf"></i>Conclusión</span>
+    <span><i class="sw path"></i>Camino seleccionado</span>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="canvas" aria-label="Árbol de decisión">
+    <div class="toolbar">
+      <button id="btn-zoom-in" type="button" aria-label="Acercar">+</button>
+      <button id="btn-zoom-out" type="button" aria-label="Alejar">−</button>
+      <button id="btn-fit" type="button">Ver todo lo abierto</button>
+      <button id="btn-collapse" type="button">Cerrar todo</button>
+    </div>
+    <div id="viewport"><div id="stage"><svg id="links"></svg><div id="nodes"></div></div></div>
+  </section>
+
+  <aside class="panel">
+    <h2>Seguir un camino</h2>
+    <p>Elige las respuestas como en la web y abre ese camino en el árbol. Empieza con el perfil de ejemplo del manual.</p>
+    <form id="path-form"></form>
+    <button id="btn-path" class="primary" type="button">Abrir este camino en el árbol</button>
+    <div class="card" id="result-card" aria-live="polite"></div>
+  </aside>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script id="kb-data" type="application/json">{"variables":[{"code":"objetivo","name":"Objetivo","kind":"input","input_type":"single","question":"¿Cuál es tu objetivo principal?","options":[["ganar_masa","Ganar masa muscular (volumen)"],["bajar_grasa","Bajar grasa (definición)"],["recomposicion","Recomposición: ganar músculo y perder grasa"],["rendimiento","Más energía y rendimiento en el entreno"],["resistencia","Mejorar resistencia (correr, ciclismo, natación)"],["bienestar","Salud y bienestar general"]]},{"code":"sexo","name":"Sexo","kind":"input","input_type":"single","question":"¿Cuál es tu sexo biológico?","options":[["hombre","Hombre"],["mujer","Mujer"]]},{"code":"edad","name":"Edad","kind":"input","input_type":"number","question":"¿Cuántos años tienes?"},{"code":"peso","name":"Peso","kind":"input","input_type":"number","question":"¿Cuánto pesas?"},{"code":"estatura","name":"Estatura","kind":"input","input_type":"number","question":"¿Cuánto mides?"},{"code":"experiencia","name":"Tiempo entrenando","kind":"input","input_type":"single","question":"¿Cuánto tiempo llevas entrenando de forma constante?","options":[["principiante","Menos de 6 meses"],["intermedio","Entre 6 meses y 2 años"],["avanzado","Más de 2 años"]]},{"code":"frecuencia","name":"Frecuencia semanal","kind":"input","input_type":"number","question":"¿Cuántos días a la semana entrenas?"},{"code":"duracion","name":"Duración de la sesión","kind":"input","input_type":"number","question":"¿Cuánto dura en promedio cada sesión?"},{"code":"tipo_entrenamiento","name":"Tipo de entrenamiento","kind":"input","input_type":"single","question":"¿Qué tipo de entrenamiento haces principalmente?","options":[["fuerza","Pesas / fuerza (gimnasio)"],["resistencia","Cardio / resistencia (correr, bici, nadar)"],["mixto","Funcional / CrossFit"],["equipo","Deporte de equipo o de contacto"]]},{"code":"horario","name":"Horario de entrenamiento","kind":"input","input_type":"single","question":"¿A qué hora sueles entrenar?","options":[["manana","En la mañana"],["tarde","En la tarde"],["noche","En la noche"]]},{"code":"dieta","name":"Tipo de dieta","kind":"input","input_type":"single","question":"¿Cómo es tu alimentación?","options":[["omnivora","Como de todo"],["vegetariana","Vegetariana"],["vegana","Vegana"]]},{"code":"proteina_dieta","name":"Proteína en la dieta","kind":"input","input_type":"single","question":"¿Cuánta proteína consumes en tus comidas?","options":[["baja","Poca"],["adecuada","Normal"],["alta","Mucha (en casi todas las comidas)"]]},{"code":"metabolismo","name":"Facilidad para subir de peso","kind":"input","input_type":"single","question":"¿Cómo es tu facilidad para subir de peso?","options":[["me_cuesta_subir","Me cuesta mucho subir de peso"],["normal","Normal"],["subo_facil","Subo de peso con facilidad"]]},{"code":"salud","name":"Condiciones de salud","kind":"input","input_type":"multi","question":"¿Tienes alguna de estas condiciones?","options":[["ninguna","Ninguna"],["hipertension","Hipertensión"],["cardiaca","Enfermedad cardíaca o arritmias"],["diabetes","Diabetes o resistencia a la insulina"],["renal","Enfermedad renal"],["hepatica","Enfermedad hepática"],["embarazo","Embarazo o lactancia"],["lactosa","Intolerancia a la lactosa"],["cafeina","Sensibilidad a la cafeína"],["ansiedad","Ansiedad o insomnio"],["articulaciones","Dolor o lesión en articulaciones"]]},{"code":"presupuesto","name":"Presupuesto mensual","kind":"input","input_type":"number","question":"¿Cuánto quieres invertir al mes en suplementos?"},{"code":"imc","name":"Índice de masa corporal","kind":"derived","input_type":"number"},{"code":"estado_peso","name":"Estado de peso","kind":"derived","input_type":"single","options":[["bajo_peso","Bajo peso"],["normal","Peso normal"],["sobrepeso","Sobrepeso"],["obesidad","Obesidad"]]},{"code":"grupo_edad","name":"Grupo de edad","kind":"derived","input_type":"single","options":[["adolescente","Adolescente"],["adulto","Adulto"],["adulto_mayor","Adulto mayor"]]},{"code":"carga_entrenamiento","name":"Carga de entrenamiento","kind":"derived","input_type":"single","options":[["baja","Baja"],["moderada","Moderada"],["alta","Alta"]]},{"code":"evitar_estimulantes","name":"Evitar estimulantes","kind":"derived","input_type":"single","options":[["si","Sí"]]},{"code":"evitar_hormonales","name":"Evitar potenciadores hormonales","kind":"derived","input_type":"single","options":[["si","Sí"]]},{"code":"requiere_medico","name":"Requiere valoración médica","kind":"derived","input_type":"single","options":[["si","Sí"]]},{"code":"perdida_electrolitos","name":"Pérdida alta de electrolitos","kind":"derived","input_type":"single","options":[["si","Sí"]]},{"code":"necesidad_proteica","name":"Necesidad proteica","kind":"derived","input_type":"single","options":[["alta","Alta"]]}],"hypotheses":[{"code":"proteina_whey","name":"Proteína whey","kind":"product","group":"proteina"},{"code":"proteina_isolatada","name":"Proteína whey aislada (isolate)","kind":"product","group":"proteina"},{"code":"proteina_vegetal","name":"Proteína vegetal","kind":"product","group":"proteina"},{"code":"ganador_peso","name":"Ganador de peso (gainer)","kind":"product","group":null},{"code":"creatina","name":"Creatina monohidratada","kind":"product","group":null},{"code":"preentreno_estimulante","name":"Pre-entreno con estimulantes","kind":"product","group":"preentreno"},{"code":"preentreno_sin_estimulante","name":"Pre-entreno sin estimulantes (óxido nítrico)","kind":"product","group":"preentreno"},{"code":"quemador_termogenico","name":"Quemador termogénico","kind":"product","group":null},{"code":"l_carnitina","name":"L-carnitina","kind":"product","group":null},{"code":"aminoacidos","name":"Aminoácidos (BCAA / EAA)","kind":"product","group":null},{"code":"glutamina","name":"Glutamina","kind":"product","group":null},{"code":"multivitaminico","name":"Multivitamínico","kind":"product","group":null},{"code":"omega3","name":"Omega 3","kind":"product","group":null},{"code":"colageno","name":"Colágeno hidrolizado","kind":"product","group":null},{"code":"electrolitos","name":"Electrolitos / hidratación","kind":"product","group":null},{"code":"magnesio_descanso","name":"Magnesio y adaptógenos para el descanso","kind":"product","group":null},{"code":"vitamina_d","name":"Vitamina D3 + K2","kind":"product","group":null},{"code":"precursor_hormonal","name":"Potenciador hormonal natural","kind":"product","group":null},{"code":"consulta_medica","name":"Consultar con un profesional de la salud","kind":"advice","group":null}],"rules":[{"code":"RF01","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"estado_peso","conclusion_value":"bajo_peso","certainty":1,"priority":100,"conditions":[{"variable":"imc","operator":"lt","value":"18.5"}]},{"code":"RF02","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"estado_peso","conclusion_value":"normal","certainty":1,"priority":100,"conditions":[{"variable":"imc","operator":"gte","value":"18.5"},{"variable":"imc","operator":"lt","value":"25"}]},{"code":"RF03","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"estado_peso","conclusion_value":"sobrepeso","certainty":1,"priority":100,"conditions":[{"variable":"imc","operator":"gte","value":"25"},{"variable":"imc","operator":"lt","value":"30"}]},{"code":"RF04","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"estado_peso","conclusion_value":"obesidad","certainty":1,"priority":100,"conditions":[{"variable":"imc","operator":"gte","value":"30"}]},{"code":"RF05","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"grupo_edad","conclusion_value":"adolescente","certainty":1,"priority":100,"conditions":[{"variable":"edad","operator":"lt","value":"18"}]},{"code":"RF06","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"grupo_edad","conclusion_value":"adulto","certainty":1,"priority":100,"conditions":[{"variable":"edad","operator":"gte","value":"18"},{"variable":"edad","operator":"lt","value":"50"}]},{"code":"RF07","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"grupo_edad","conclusion_value":"adulto_mayor","certainty":1,"priority":100,"conditions":[{"variable":"edad","operator":"gte","value":"50"}]},{"code":"RF08","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"carga_entrenamiento","conclusion_value":"alta","certainty":1,"priority":100,"conditions":[{"variable":"frecuencia","operator":"gte","value":"5"},{"variable":"duracion","operator":"gte","value":"60"}]},{"code":"RF09","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"carga_entrenamiento","conclusion_value":"moderada","certainty":1,"priority":100,"conditions":[{"variable":"frecuencia","operator":"gte","value":"3"},{"variable":"frecuencia","operator":"lt","value":"5"}]},{"code":"RF10","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"carga_entrenamiento","conclusion_value":"moderada","certainty":1,"priority":100,"conditions":[{"variable":"frecuencia","operator":"gte","value":"5"},{"variable":"duracion","operator":"lt","value":"60"}]},{"code":"RF11","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"carga_entrenamiento","conclusion_value":"baja","certainty":1,"priority":100,"conditions":[{"variable":"frecuencia","operator":"lt","value":"3"}]},{"code":"RF12","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"evitar_estimulantes","conclusion_value":"si","certainty":1,"priority":100,"conditions":[{"variable":"salud","operator":"contains","value":"hipertension"}]},{"code":"RF13","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"evitar_estimulantes","conclusion_value":"si","certainty":1,"priority":100,"conditions":[{"variable":"salud","operator":"contains","value":"cardiaca"}]},{"code":"RF14","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"evitar_estimulantes","conclusion_value":"si","certainty":1,"priority":100,"conditions":[{"variable":"salud","operator":"contains","value":"cafeina"}]},{"code":"RF15","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"evitar_estimulantes","conclusion_value":"si","certainty":0.8,"priority":100,"conditions":[{"variable":"salud","operator":"contains","value":"ansiedad"}]},{"code":"RF16","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"evitar_estimulantes","conclusion_value":"si","certainty":1,"priority":100,"conditions":[{"variable":"salud","operator":"contains","value":"embarazo"}]},{"code":"RF17","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"evitar_estimulantes","conclusion_value":"si","certainty":0.6,"priority":100,"conditions":[{"variable":"horario","operator":"eq","value":"noche"}]},{"code":"RF18","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"evitar_estimulantes","conclusion_value":"si","certainty":0.7,"priority":100,"conditions":[{"variable":"grupo_edad","operator":"eq","value":"adolescente"}]},{"code":"RF19","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"evitar_hormonales","conclusion_value":"si","certainty":1,"priority":100,"conditions":[{"variable":"grupo_edad","operator":"eq","value":"adolescente"}]},{"code":"RF20","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"evitar_hormonales","conclusion_value":"si","certainty":1,"priority":100,"conditions":[{"variable":"sexo","operator":"eq","value":"mujer"}]},{"code":"RF21","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"evitar_hormonales","conclusion_value":"si","certainty":1,"priority":100,"conditions":[{"variable":"salud","operator":"contains","value":"hepatica"}]},{"code":"RF22","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"requiere_medico","conclusion_value":"si","certainty":1,"priority":100,"conditions":[{"variable":"salud","operator":"contains","value":"embarazo"}]},{"code":"RF23","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"requiere_medico","conclusion_value":"si","certainty":1,"priority":100,"conditions":[{"variable":"salud","operator":"contains","value":"renal"}]},{"code":"RF24","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"requiere_medico","conclusion_value":"si","certainty":1,"priority":100,"conditions":[{"variable":"salud","operator":"contains","value":"cardiaca"}]},{"code":"RF25","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"requiere_medico","conclusion_value":"si","certainty":0.9,"priority":100,"conditions":[{"variable":"salud","operator":"contains","value":"hepatica"}]},{"code":"RF26","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"requiere_medico","conclusion_value":"si","certainty":0.6,"priority":100,"conditions":[{"variable":"salud","operator":"contains","value":"diabetes"}]},{"code":"RF27","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"perdida_electrolitos","conclusion_value":"si","certainty":0.9,"priority":100,"conditions":[{"variable":"tipo_entrenamiento","operator":"eq","value":"resistencia"},{"variable":"duracion","operator":"gte","value":"60"}]},{"code":"RF28","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"perdida_electrolitos","conclusion_value":"si","certainty":0.6,"priority":100,"conditions":[{"variable":"tipo_entrenamiento","operator":"eq","value":"mixto"},{"variable":"carga_entrenamiento","operator":"eq","value":"alta"}]},{"code":"RF29","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"necesidad_proteica","conclusion_value":"alta","certainty":0.8,"priority":100,"conditions":[{"variable":"objetivo","operator":"in","value":"ganar_masa,recomposicion"},{"variable":"proteina_dieta","operator":"in","value":"baja,adecuada"}]},{"code":"RF30","conclusion_type":"fact","hypothesis":null,"conclusion_variable":"necesidad_proteica","conclusion_value":"alta","certainty":0.7,"priority":100,"conditions":[{"variable":"objetivo","operator":"eq","value":"bajar_grasa"},{"variable":"proteina_dieta","operator":"in","value":"baja,adecuada"}]},{"code":"R01","conclusion_type":"hypothesis","hypothesis":"proteina_whey","conclusion_variable":null,"conclusion_value":null,"certainty":0.75,"priority":50,"conditions":[{"variable":"necesidad_proteica","operator":"eq","value":"alta"},{"variable":"dieta","operator":"neq","value":"vegana"}]},{"code":"R02","conclusion_type":"hypothesis","hypothesis":"proteina_whey","conclusion_variable":null,"conclusion_value":null,"certainty":0.5,"priority":50,"conditions":[{"variable":"objetivo","operator":"eq","value":"ganar_masa"}]},{"code":"R03","conclusion_type":"hypothesis","hypothesis":"proteina_whey","conclusion_variable":null,"conclusion_value":null,"certainty":0.55,"priority":50,"conditions":[{"variable":"objetivo","operator":"eq","value":"recomposicion"}]},{"code":"R04","conclusion_type":"hypothesis","hypothesis":"proteina_whey","conclusion_variable":null,"conclusion_value":null,"certainty":0.45,"priority":50,"conditions":[{"variable":"objetivo","operator":"eq","value":"bajar_grasa"}]},{"code":"R05","conclusion_type":"hypothesis","hypothesis":"proteina_whey","conclusion_variable":null,"conclusion_value":null,"certainty":-0.5,"priority":90,"conditions":[{"variable":"proteina_dieta","operator":"eq","value":"alta"}]},{"code":"R06","conclusion_type":"hypothesis","hypothesis":"proteina_whey","conclusion_variable":null,"conclusion_value":null,"certainty":-0.8,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"lactosa"}]},{"code":"R07","conclusion_type":"hypothesis","hypothesis":"proteina_whey","conclusion_variable":null,"conclusion_value":null,"certainty":-1,"priority":90,"conditions":[{"variable":"dieta","operator":"eq","value":"vegana"}]},{"code":"R08","conclusion_type":"hypothesis","hypothesis":"proteina_whey","conclusion_variable":null,"conclusion_value":null,"certainty":-1,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"renal"}]},{"code":"R09","conclusion_type":"hypothesis","hypothesis":"proteina_isolatada","conclusion_variable":null,"conclusion_value":null,"certainty":0.85,"priority":50,"conditions":[{"variable":"salud","operator":"contains","value":"lactosa"},{"variable":"necesidad_proteica","operator":"eq","value":"alta"}]},{"code":"R10","conclusion_type":"hypothesis","hypothesis":"proteina_isolatada","conclusion_variable":null,"conclusion_value":null,"certainty":0.55,"priority":50,"conditions":[{"variable":"objetivo","operator":"eq","value":"bajar_grasa"},{"variable":"necesidad_proteica","operator":"eq","value":"alta"}]},{"code":"R11","conclusion_type":"hypothesis","hypothesis":"proteina_isolatada","conclusion_variable":null,"conclusion_value":null,"certainty":-1,"priority":90,"conditions":[{"variable":"dieta","operator":"eq","value":"vegana"}]},{"code":"R12","conclusion_type":"hypothesis","hypothesis":"proteina_isolatada","conclusion_variable":null,"conclusion_value":null,"certainty":-1,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"renal"}]},{"code":"R13","conclusion_type":"hypothesis","hypothesis":"proteina_vegetal","conclusion_variable":null,"conclusion_value":null,"certainty":0.9,"priority":50,"conditions":[{"variable":"dieta","operator":"eq","value":"vegana"},{"variable":"objetivo","operator":"in","value":"ganar_masa,recomposicion,bajar_grasa"}]},{"code":"R14","conclusion_type":"hypothesis","hypothesis":"proteina_vegetal","conclusion_variable":null,"conclusion_value":null,"certainty":0.7,"priority":50,"conditions":[{"variable":"dieta","operator":"eq","value":"vegetariana"},{"variable":"salud","operator":"contains","value":"lactosa"}]},{"code":"R15","conclusion_type":"hypothesis","hypothesis":"proteina_vegetal","conclusion_variable":null,"conclusion_value":null,"certainty":-1,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"renal"}]},{"code":"R16","conclusion_type":"hypothesis","hypothesis":"ganador_peso","conclusion_variable":null,"conclusion_value":null,"certainty":0.8,"priority":50,"conditions":[{"variable":"objetivo","operator":"eq","value":"ganar_masa"},{"variable":"metabolismo","operator":"eq","value":"me_cuesta_subir"}]},{"code":"R17","conclusion_type":"hypothesis","hypothesis":"ganador_peso","conclusion_variable":null,"conclusion_value":null,"certainty":0.75,"priority":50,"conditions":[{"variable":"objetivo","operator":"eq","value":"ganar_masa"},{"variable":"estado_peso","operator":"eq","value":"bajo_peso"}]},{"code":"R18","conclusion_type":"hypothesis","hypothesis":"ganador_peso","conclusion_variable":null,"conclusion_value":null,"certainty":-0.9,"priority":90,"conditions":[{"variable":"estado_peso","operator":"in","value":"sobrepeso,obesidad"}]},{"code":"R19","conclusion_type":"hypothesis","hypothesis":"ganador_peso","conclusion_variable":null,"conclusion_value":null,"certainty":-1,"priority":90,"conditions":[{"variable":"objetivo","operator":"eq","value":"bajar_grasa"}]},{"code":"R20","conclusion_type":"hypothesis","hypothesis":"ganador_peso","conclusion_variable":null,"conclusion_value":null,"certainty":-0.9,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"diabetes"}]},{"code":"R21","conclusion_type":"hypothesis","hypothesis":"ganador_peso","conclusion_variable":null,"conclusion_value":null,"certainty":-0.7,"priority":90,"conditions":[{"variable":"metabolismo","operator":"eq","value":"subo_facil"}]},{"code":"R22","conclusion_type":"hypothesis","hypothesis":"ganador_peso","conclusion_variable":null,"conclusion_value":null,"certainty":-0.6,"priority":90,"conditions":[{"variable":"dieta","operator":"eq","value":"vegana"}]},{"code":"R23","conclusion_type":"hypothesis","hypothesis":"creatina","conclusion_variable":null,"conclusion_value":null,"certainty":0.75,"priority":50,"conditions":[{"variable":"objetivo","operator":"in","value":"ganar_masa,recomposicion"}]},{"code":"R24","conclusion_type":"hypothesis","hypothesis":"creatina","conclusion_variable":null,"conclusion_value":null,"certainty":0.5,"priority":50,"conditions":[{"variable":"tipo_entrenamiento","operator":"in","value":"fuerza,mixto,equipo"}]},{"code":"R25","conclusion_type":"hypothesis","hypothesis":"creatina","conclusion_variable":null,"conclusion_value":null,"certainty":0.45,"priority":50,"conditions":[{"variable":"objetivo","operator":"eq","value":"rendimiento"}]},{"code":"R26","conclusion_type":"hypothesis","hypothesis":"creatina","conclusion_variable":null,"conclusion_value":null,"certainty":0.35,"priority":50,"conditions":[{"variable":"dieta","operator":"in","value":"vegetariana,vegana"}]},{"code":"R27","conclusion_type":"hypothesis","hypothesis":"creatina","conclusion_variable":null,"conclusion_value":null,"certainty":0.4,"priority":50,"conditions":[{"variable":"grupo_edad","operator":"eq","value":"adulto_mayor"},{"variable":"carga_entrenamiento","operator":"in","value":"moderada,alta"}]},{"code":"R28","conclusion_type":"hypothesis","hypothesis":"creatina","conclusion_variable":null,"conclusion_value":null,"certainty":-1,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"renal"}]},{"code":"R29","conclusion_type":"hypothesis","hypothesis":"creatina","conclusion_variable":null,"conclusion_value":null,"certainty":-1,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"embarazo"}]},{"code":"R30","conclusion_type":"hypothesis","hypothesis":"creatina","conclusion_variable":null,"conclusion_value":null,"certainty":-0.3,"priority":90,"conditions":[{"variable":"grupo_edad","operator":"eq","value":"adolescente"}]},{"code":"R31","conclusion_type":"hypothesis","hypothesis":"preentreno_estimulante","conclusion_variable":null,"conclusion_value":null,"certainty":0.7,"priority":50,"conditions":[{"variable":"objetivo","operator":"eq","value":"rendimiento"}]},{"code":"R32","conclusion_type":"hypothesis","hypothesis":"preentreno_estimulante","conclusion_variable":null,"conclusion_value":null,"certainty":0.4,"priority":50,"conditions":[{"variable":"experiencia","operator":"eq","value":"avanzado"},{"variable":"objetivo","operator":"in","value":"ganar_masa,recomposicion"}]},{"code":"R33","conclusion_type":"hypothesis","hypothesis":"preentreno_estimulante","conclusion_variable":null,"conclusion_value":null,"certainty":-0.4,"priority":90,"conditions":[{"variable":"experiencia","operator":"eq","value":"principiante"}]},{"code":"R34","conclusion_type":"hypothesis","hypothesis":"preentreno_estimulante","conclusion_variable":null,"conclusion_value":null,"certainty":-1,"priority":90,"conditions":[{"variable":"evitar_estimulantes","operator":"eq","value":"si"}]},{"code":"R35","conclusion_type":"hypothesis","hypothesis":"preentreno_estimulante","conclusion_variable":null,"conclusion_value":null,"certainty":-0.5,"priority":90,"conditions":[{"variable":"carga_entrenamiento","operator":"eq","value":"baja"}]},{"code":"R36","conclusion_type":"hypothesis","hypothesis":"preentreno_sin_estimulante","conclusion_variable":null,"conclusion_value":null,"certainty":0.7,"priority":50,"conditions":[{"variable":"evitar_estimulantes","operator":"eq","value":"si"},{"variable":"objetivo","operator":"in","value":"rendimiento,ganar_masa,recomposicion"}]},{"code":"R37","conclusion_type":"hypothesis","hypothesis":"preentreno_sin_estimulante","conclusion_variable":null,"conclusion_value":null,"certainty":0.45,"priority":50,"conditions":[{"variable":"objetivo","operator":"eq","value":"rendimiento"}]},{"code":"R38","conclusion_type":"hypothesis","hypothesis":"preentreno_sin_estimulante","conclusion_variable":null,"conclusion_value":null,"certainty":-1,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"embarazo"}]},{"code":"R39","conclusion_type":"hypothesis","hypothesis":"quemador_termogenico","conclusion_variable":null,"conclusion_value":null,"certainty":0.6,"priority":50,"conditions":[{"variable":"objetivo","operator":"eq","value":"bajar_grasa"},{"variable":"experiencia","operator":"in","value":"intermedio,avanzado"}]},{"code":"R40","conclusion_type":"hypothesis","hypothesis":"quemador_termogenico","conclusion_variable":null,"conclusion_value":null,"certainty":0.3,"priority":50,"conditions":[{"variable":"objetivo","operator":"eq","value":"bajar_grasa"},{"variable":"experiencia","operator":"eq","value":"principiante"}]},{"code":"R41","conclusion_type":"hypothesis","hypothesis":"quemador_termogenico","conclusion_variable":null,"conclusion_value":null,"certainty":-1,"priority":90,"conditions":[{"variable":"evitar_estimulantes","operator":"eq","value":"si"}]},{"code":"R42","conclusion_type":"hypothesis","hypothesis":"quemador_termogenico","conclusion_variable":null,"conclusion_value":null,"certainty":-1,"priority":90,"conditions":[{"variable":"grupo_edad","operator":"eq","value":"adolescente"}]},{"code":"R43","conclusion_type":"hypothesis","hypothesis":"l_carnitina","conclusion_variable":null,"conclusion_value":null,"certainty":0.45,"priority":50,"conditions":[{"variable":"objetivo","operator":"eq","value":"bajar_grasa"}]},{"code":"R44","conclusion_type":"hypothesis","hypothesis":"l_carnitina","conclusion_variable":null,"conclusion_value":null,"certainty":0.6,"priority":50,"conditions":[{"variable":"objetivo","operator":"eq","value":"bajar_grasa"},{"variable":"evitar_estimulantes","operator":"eq","value":"si"}]},{"code":"R45","conclusion_type":"hypothesis","hypothesis":"l_carnitina","conclusion_variable":null,"conclusion_value":null,"certainty":-0.8,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"embarazo"}]},{"code":"R46","conclusion_type":"hypothesis","hypothesis":"aminoacidos","conclusion_variable":null,"conclusion_value":null,"certainty":0.55,"priority":50,"conditions":[{"variable":"carga_entrenamiento","operator":"eq","value":"alta"}]},{"code":"R47","conclusion_type":"hypothesis","hypothesis":"aminoacidos","conclusion_variable":null,"conclusion_value":null,"certainty":0.5,"priority":50,"conditions":[{"variable":"objetivo","operator":"eq","value":"resistencia"}]},{"code":"R48","conclusion_type":"hypothesis","hypothesis":"aminoacidos","conclusion_variable":null,"conclusion_value":null,"certainty":0.5,"priority":50,"conditions":[{"variable":"dieta","operator":"eq","value":"vegana"},{"variable":"objetivo","operator":"in","value":"ganar_masa,recomposicion"}]},{"code":"R49","conclusion_type":"hypothesis","hypothesis":"aminoacidos","conclusion_variable":null,"conclusion_value":null,"certainty":-0.4,"priority":90,"conditions":[{"variable":"carga_entrenamiento","operator":"eq","value":"baja"}]},{"code":"R50","conclusion_type":"hypothesis","hypothesis":"glutamina","conclusion_variable":null,"conclusion_value":null,"certainty":0.45,"priority":50,"conditions":[{"variable":"carga_entrenamiento","operator":"eq","value":"alta"}]},{"code":"R51","conclusion_type":"hypothesis","hypothesis":"glutamina","conclusion_variable":null,"conclusion_value":null,"certainty":0.5,"priority":50,"conditions":[{"variable":"tipo_entrenamiento","operator":"eq","value":"resistencia"},{"variable":"duracion","operator":"gte","value":"90"}]},{"code":"R52","conclusion_type":"hypothesis","hypothesis":"multivitaminico","conclusion_variable":null,"conclusion_value":null,"certainty":0.75,"priority":50,"conditions":[{"variable":"objetivo","operator":"eq","value":"bienestar"}]},{"code":"R53","conclusion_type":"hypothesis","hypothesis":"multivitaminico","conclusion_variable":null,"conclusion_value":null,"certainty":0.4,"priority":50,"conditions":[{"variable":"objetivo","operator":"eq","value":"bajar_grasa"}]},{"code":"R54","conclusion_type":"hypothesis","hypothesis":"multivitaminico","conclusion_variable":null,"conclusion_value":null,"certainty":0.5,"priority":50,"conditions":[{"variable":"dieta","operator":"eq","value":"vegana"}]},{"code":"R55","conclusion_type":"hypothesis","hypothesis":"multivitaminico","conclusion_variable":null,"conclusion_value":null,"certainty":0.35,"priority":50,"conditions":[{"variable":"carga_entrenamiento","operator":"eq","value":"alta"}]},{"code":"R56","conclusion_type":"hypothesis","hypothesis":"omega3","conclusion_variable":null,"conclusion_value":null,"certainty":0.65,"priority":50,"conditions":[{"variable":"objetivo","operator":"eq","value":"bienestar"}]},{"code":"R57","conclusion_type":"hypothesis","hypothesis":"omega3","conclusion_variable":null,"conclusion_value":null,"certainty":0.55,"priority":50,"conditions":[{"variable":"grupo_edad","operator":"eq","value":"adulto_mayor"}]},{"code":"R58","conclusion_type":"hypothesis","hypothesis":"omega3","conclusion_variable":null,"conclusion_value":null,"certainty":0.5,"priority":50,"conditions":[{"variable":"salud","operator":"contains","value":"articulaciones"}]},{"code":"R59","conclusion_type":"hypothesis","hypothesis":"omega3","conclusion_variable":null,"conclusion_value":null,"certainty":-0.6,"priority":90,"conditions":[{"variable":"dieta","operator":"eq","value":"vegana"}]},{"code":"R60","conclusion_type":"hypothesis","hypothesis":"colageno","conclusion_variable":null,"conclusion_value":null,"certainty":0.75,"priority":50,"conditions":[{"variable":"salud","operator":"contains","value":"articulaciones"}]},{"code":"R61","conclusion_type":"hypothesis","hypothesis":"colageno","conclusion_variable":null,"conclusion_value":null,"certainty":0.5,"priority":50,"conditions":[{"variable":"grupo_edad","operator":"eq","value":"adulto_mayor"}]},{"code":"R62","conclusion_type":"hypothesis","hypothesis":"colageno","conclusion_variable":null,"conclusion_value":null,"certainty":0.4,"priority":50,"conditions":[{"variable":"tipo_entrenamiento","operator":"in","value":"equipo,mixto"},{"variable":"carga_entrenamiento","operator":"eq","value":"alta"}]},{"code":"R63","conclusion_type":"hypothesis","hypothesis":"colageno","conclusion_variable":null,"conclusion_value":null,"certainty":-1,"priority":90,"conditions":[{"variable":"dieta","operator":"in","value":"vegana,vegetariana"}]},{"code":"R64","conclusion_type":"hypothesis","hypothesis":"electrolitos","conclusion_variable":null,"conclusion_value":null,"certainty":0.8,"priority":50,"conditions":[{"variable":"perdida_electrolitos","operator":"eq","value":"si"}]},{"code":"R65","conclusion_type":"hypothesis","hypothesis":"electrolitos","conclusion_variable":null,"conclusion_value":null,"certainty":0.6,"priority":50,"conditions":[{"variable":"objetivo","operator":"eq","value":"resistencia"}]},{"code":"R66","conclusion_type":"hypothesis","hypothesis":"electrolitos","conclusion_variable":null,"conclusion_value":null,"certainty":0.4,"priority":50,"conditions":[{"variable":"tipo_entrenamiento","operator":"eq","value":"equipo"}]},{"code":"R67","conclusion_type":"hypothesis","hypothesis":"electrolitos","conclusion_variable":null,"conclusion_value":null,"certainty":-1,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"renal"}]},{"code":"R68","conclusion_type":"hypothesis","hypothesis":"electrolitos","conclusion_variable":null,"conclusion_value":null,"certainty":-0.4,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"hipertension"}]},{"code":"R69","conclusion_type":"hypothesis","hypothesis":"magnesio_descanso","conclusion_variable":null,"conclusion_value":null,"certainty":0.7,"priority":50,"conditions":[{"variable":"salud","operator":"contains","value":"ansiedad"}]},{"code":"R70","conclusion_type":"hypothesis","hypothesis":"magnesio_descanso","conclusion_variable":null,"conclusion_value":null,"certainty":0.4,"priority":50,"conditions":[{"variable":"carga_entrenamiento","operator":"eq","value":"alta"}]},{"code":"R71","conclusion_type":"hypothesis","hypothesis":"magnesio_descanso","conclusion_variable":null,"conclusion_value":null,"certainty":0.35,"priority":50,"conditions":[{"variable":"horario","operator":"eq","value":"noche"},{"variable":"carga_entrenamiento","operator":"in","value":"moderada,alta"}]},{"code":"R72","conclusion_type":"hypothesis","hypothesis":"magnesio_descanso","conclusion_variable":null,"conclusion_value":null,"certainty":-0.8,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"embarazo"}]},{"code":"R73","conclusion_type":"hypothesis","hypothesis":"vitamina_d","conclusion_variable":null,"conclusion_value":null,"certainty":0.6,"priority":50,"conditions":[{"variable":"grupo_edad","operator":"eq","value":"adulto_mayor"}]},{"code":"R74","conclusion_type":"hypothesis","hypothesis":"vitamina_d","conclusion_variable":null,"conclusion_value":null,"certainty":0.7,"priority":50,"conditions":[{"variable":"sexo","operator":"eq","value":"mujer"},{"variable":"grupo_edad","operator":"eq","value":"adulto_mayor"}]},{"code":"R75","conclusion_type":"hypothesis","hypothesis":"vitamina_d","conclusion_variable":null,"conclusion_value":null,"certainty":0.4,"priority":50,"conditions":[{"variable":"dieta","operator":"eq","value":"vegana"}]},{"code":"R76","conclusion_type":"hypothesis","hypothesis":"precursor_hormonal","conclusion_variable":null,"conclusion_value":null,"certainty":0.45,"priority":50,"conditions":[{"variable":"sexo","operator":"eq","value":"hombre"},{"variable":"experiencia","operator":"eq","value":"avanzado"},{"variable":"objetivo","operator":"in","value":"ganar_masa,recomposicion"},{"variable":"grupo_edad","operator":"in","value":"adulto,adulto_mayor"}]},{"code":"R77","conclusion_type":"hypothesis","hypothesis":"precursor_hormonal","conclusion_variable":null,"conclusion_value":null,"certainty":-1,"priority":90,"conditions":[{"variable":"evitar_hormonales","operator":"eq","value":"si"}]},{"code":"R78","conclusion_type":"hypothesis","hypothesis":"precursor_hormonal","conclusion_variable":null,"conclusion_value":null,"certainty":-0.6,"priority":90,"conditions":[{"variable":"experiencia","operator":"in","value":"principiante,intermedio"}]},{"code":"R79","conclusion_type":"hypothesis","hypothesis":"precursor_hormonal","conclusion_variable":null,"conclusion_value":null,"certainty":-1,"priority":90,"conditions":[{"variable":"requiere_medico","operator":"eq","value":"si"}]},{"code":"R80","conclusion_type":"hypothesis","hypothesis":"consulta_medica","conclusion_variable":null,"conclusion_value":null,"certainty":1,"priority":90,"conditions":[{"variable":"requiere_medico","operator":"eq","value":"si"}]},{"code":"R81","conclusion_type":"hypothesis","hypothesis":"consulta_medica","conclusion_variable":null,"conclusion_value":null,"certainty":0.5,"priority":50,"conditions":[{"variable":"estado_peso","operator":"eq","value":"obesidad"},{"variable":"objetivo","operator":"eq","value":"bajar_grasa"}]},{"code":"R82","conclusion_type":"hypothesis","hypothesis":"aminoacidos","conclusion_variable":null,"conclusion_value":null,"certainty":-0.7,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"renal"}]},{"code":"R83","conclusion_type":"hypothesis","hypothesis":"glutamina","conclusion_variable":null,"conclusion_value":null,"certainty":-0.7,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"renal"}]},{"code":"R84","conclusion_type":"hypothesis","hypothesis":"magnesio_descanso","conclusion_variable":null,"conclusion_value":null,"certainty":-1,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"renal"}]},{"code":"R85","conclusion_type":"hypothesis","hypothesis":"multivitaminico","conclusion_variable":null,"conclusion_value":null,"certainty":-1,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"embarazo"}]},{"code":"R86","conclusion_type":"hypothesis","hypothesis":"quemador_termogenico","conclusion_variable":null,"conclusion_value":null,"certainty":-1,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"hepatica"}]},{"code":"R87","conclusion_type":"hypothesis","hypothesis":"preentreno_estimulante","conclusion_variable":null,"conclusion_value":null,"certainty":-0.7,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"hepatica"}]},{"code":"R88","conclusion_type":"hypothesis","hypothesis":"preentreno_sin_estimulante","conclusion_variable":null,"conclusion_value":null,"certainty":-1,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"cardiaca"}]},{"code":"R89","conclusion_type":"hypothesis","hypothesis":"omega3","conclusion_variable":null,"conclusion_value":null,"certainty":-1,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"embarazo"}]},{"code":"R90","conclusion_type":"hypothesis","hypothesis":"vitamina_d","conclusion_variable":null,"conclusion_value":null,"certainty":-1,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"embarazo"}]},{"code":"R91","conclusion_type":"hypothesis","hypothesis":"proteina_whey","conclusion_variable":null,"conclusion_value":null,"certainty":-0.8,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"embarazo"}]},{"code":"R92","conclusion_type":"hypothesis","hypothesis":"proteina_isolatada","conclusion_variable":null,"conclusion_value":null,"certainty":-0.8,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"embarazo"}]},{"code":"R93","conclusion_type":"hypothesis","hypothesis":"proteina_vegetal","conclusion_variable":null,"conclusion_value":null,"certainty":-0.8,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"embarazo"}]},{"code":"R94","conclusion_type":"hypothesis","hypothesis":"ganador_peso","conclusion_variable":null,"conclusion_value":null,"certainty":-1,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"embarazo"}]},{"code":"R95","conclusion_type":"hypothesis","hypothesis":"colageno","conclusion_variable":null,"conclusion_value":null,"certainty":-0.8,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"embarazo"}]},{"code":"R96","conclusion_type":"hypothesis","hypothesis":"aminoacidos","conclusion_variable":null,"conclusion_value":null,"certainty":-0.8,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"embarazo"}]},{"code":"R97","conclusion_type":"hypothesis","hypothesis":"glutamina","conclusion_variable":null,"conclusion_value":null,"certainty":-0.8,"priority":90,"conditions":[{"variable":"salud","operator":"contains","value":"embarazo"}]}]}</script>
+<script>
+// Motor de inferencia del sistema experto (traducción fiel de backend/src/modules/expert/engine.ts).
+// Encadenamiento hacia adelante por estratos hasta punto fijo + factores de certeza de MYCIN.
+const FIRE_THRESHOLD = 0.2, RECOMMEND_THRESHOLD = 0.3, OPTIONAL_THRESHOLD = 0.15, REJECT_THRESHOLD = -0.2
+
+function combineCF(a, b) {
+  if (a === -1 || b === -1) return -1
+  if (a >= 0 && b >= 0) return a + b * (1 - a)
+  if (a < 0 && b < 0) return a + b * (1 + a)
+  return (a + b) / (1 - Math.min(Math.abs(a), Math.abs(b)))
+}
+const round = (n) => Math.round(n * 1000) / 1000
+
+function initialMemory(kb, answers) {
+  const wm = new Map()
+  for (const v of kb.variables) {
+    if (v.kind !== "input") continue
+    const raw = answers[v.code]
+    if (raw == null || raw === "") continue
+    if (v.input_type === "number") {
+      const n = Number(raw)
+      if (Number.isFinite(n)) wm.set(v.code, { type: "number", value: n, source: "usuario" })
+      continue
+    }
+    const list = (Array.isArray(raw) ? raw : [raw]).map(String).filter(Boolean)
+    if (!list.length) continue
+    wm.set(v.code, { type: "categorical", values: new Map(list.map((x) => [x, 1])), source: "usuario", derivedBy: new Map() })
+  }
+  const peso = wm.get("peso"), est = wm.get("estatura")
+  if (peso && peso.type === "number" && est && est.type === "number" && est.value > 0) {
+    const imc = peso.value / Math.pow(est.value / 100, 2)
+    wm.set("imc", { type: "number", value: Math.round(imc * 10) / 10, source: "calculado" })
+  }
+  return wm
+}
+
+function evaluateCondition(c, wm) {
+  const fact = wm.get(c.variable)
+  const list = c.value.split(",").map((s) => s.trim()).filter(Boolean)
+  if (c.operator === "gt" || c.operator === "gte" || c.operator === "lt" || c.operator === "lte") {
+    if (!fact || fact.type !== "number") return 0
+    const t = Number(c.value), v = fact.value
+    const ok = c.operator === "gt" ? v > t : c.operator === "gte" ? v >= t : c.operator === "lt" ? v < t : v <= t
+    return ok ? 1 : 0
+  }
+  if (fact && fact.type === "number") {
+    const eq = fact.value === Number(c.value)
+    if (c.operator === "eq") return eq ? 1 : 0
+    if (c.operator === "neq") return eq ? 0 : 1
+    return 0
+  }
+  const cfOf = (val) => (fact && fact.type === "categorical" ? fact.values.get(val) ?? 0 : 0)
+  const maxOf = (vals) => Math.max(0, ...vals.map(cfOf))
+  switch (c.operator) {
+    case "eq": case "contains": return cfOf(c.value)
+    case "in": return maxOf(list)
+    case "neq": case "not_contains": return 1 - cfOf(c.value)
+    case "not_in": return 1 - maxOf(list)
+    default: return 0
+  }
+}
+
+function evaluatePremise(rule, wm) {
+  if (!rule.conditions.length) return 0
+  let min = 1
+  for (const c of rule.conditions) { min = Math.min(min, evaluateCondition(c, wm)); if (min === 0) return 0 }
+  return min
+}
+
+function infer(kb, answers) {
+  const base = initialMemory(kb, answers)
+  const byPriority = (a, b) => b.priority - a.priority
+  const factRules = kb.rules.filter((r) => r.conclusion_type === "fact").sort(byPriority)
+  const hypRules = kb.rules.filter((r) => r.conclusion_type === "hypothesis").sort(byPriority)
+  let wm = new Map(base), signature = "", fired = [], iterations
+  for (iterations = 1; iterations <= 12; iterations++) {
+    const derived = new Map(); const firedNow = []
+    for (const rule of factRules) {
+      if (!rule.conclusion_variable || rule.conclusion_value == null) continue
+      const premise = evaluatePremise(rule, wm)
+      if (premise < FIRE_THRESHOLD) continue
+      const contribution = premise * rule.certainty
+      const slot = derived.get(rule.conclusion_variable) ?? { values: new Map(), by: new Map() }
+      const prev = slot.values.get(rule.conclusion_value)
+      slot.values.set(rule.conclusion_value, prev == null ? contribution : combineCF(prev, contribution))
+      slot.by.set(rule.conclusion_value, [...(slot.by.get(rule.conclusion_value) ?? []), rule.code])
+      derived.set(rule.conclusion_variable, slot)
+      firedNow.push(rule.code)
+    }
+    const next = new Map(base)
+    for (const [code, slot] of derived) {
+      const positive = new Map([...slot.values].filter(([, cf]) => cf > 0).map(([v, cf]) => [v, Math.min(1, cf)]))
+      if (!positive.size) continue
+      next.set(code, { type: "categorical", values: positive, source: "inferido", derivedBy: slot.by })
+    }
+    const sig = JSON.stringify([...next].map(([k, f]) => [k, f.type === "number" ? f.value : [...f.values].map(([v, c]) => [v, round(c)])]))
+    wm = next; fired = firedNow
+    if (sig === signature) break
+    signature = sig
+  }
+  const acc = new Map(); const firedHyp = []
+  for (const rule of hypRules) {
+    if (!rule.hypothesis) continue
+    const premise = evaluatePremise(rule, wm)
+    if (premise < FIRE_THRESHOLD) continue
+    const contribution = premise * rule.certainty
+    const e = acc.get(rule.hypothesis) ?? { cf: null, rules: [] }
+    e.cf = e.cf == null ? contribution : combineCF(e.cf, contribution)
+    e.rules.push(rule.code)
+    acc.set(rule.hypothesis, e)
+    firedHyp.push(rule.code)
+  }
+  const hypotheses = kb.hypotheses.map((h) => {
+    const e = acc.get(h.code); const cf = e ? e.cf : 0
+    let status = "none"
+    if (h.kind === "advice") status = cf >= 0.5 ? "advice" : "none"
+    else if (cf >= RECOMMEND_THRESHOLD) status = "recommended"
+    else if (cf >= OPTIONAL_THRESHOLD) status = "optional"
+    else if (e && cf <= REJECT_THRESHOLD) status = "rejected"
+    return { code: h.code, name: h.name, kind: h.kind, group: h.group, certainty: round(cf), status, rules: e ? e.rules : [] }
+  })
+  hypotheses.sort((a, b) => b.certainty - a.certainty)
+  const facts = []
+  for (const [code, f] of wm) {
+    if (f.source === "usuario") continue
+    if (f.type === "number") facts.push({ code, value: f.value, certainty: 1 })
+    else for (const [value, cf] of f.values) facts.push({ code, value, certainty: round(cf) })
+  }
+  return { hypotheses, facts, firedRules: [...new Set([...fired, ...firedHyp])], iterations }
+}
+
+
+
+</script>
+<script>
+const KB = JSON.parse(document.getElementById("kb-data").textContent)
+const V = Object.fromEntries(KB.variables.map((v) => [v.code, v]))
+const HN = Object.fromEntries(KB.hypotheses.map((h) => [h.code, h]))
+const fmt = (n) => n.toFixed(2).replace(".", ",")
+const optsOf = (code) => V[code].options.map(([value, label]) => ({ label, set: { [code]: value } }))
+
+// Preguntas en el orden de la web. Las numéricas se agrupan en los rangos de las reglas
+// (cada rango usa un valor representativo para ejecutar el motor).
+const QUESTIONS = [
+  { n: "1", key: "objetivo", text: V.objetivo.question, opts: optsOf("objetivo") },
+  { n: "2", key: "sexo", text: V.sexo.question, opts: optsOf("sexo") },
+  { n: "3", key: "edad", text: V.edad.question, opts: [
+    { label: "14 a 17 años", set: { edad: 16 } }, { label: "18 a 49 años", set: { edad: 30 } }, { label: "50 a 90 años", set: { edad: 60 } }] },
+  { n: "4–5", key: "imc", text: "¿Cuánto pesas? · ¿Cuánto mides? (el sistema calcula el IMC)", opts: [
+    { label: "IMC menor a 18,5", set: { peso: 50, estatura: 170 } }, { label: "IMC 18,5 a 24,9", set: { peso: 65, estatura: 170 } },
+    { label: "IMC 25 a 29,9", set: { peso: 78, estatura: 170 } }, { label: "IMC 30 o más", set: { peso: 95, estatura: 170 } }] },
+  { n: "6", key: "experiencia", text: V.experiencia.question, opts: optsOf("experiencia") },
+  { n: "7", key: "frecuencia", text: V.frecuencia.question, opts: [
+    { label: "0 a 2 días", set: { frecuencia: 2 } }, { label: "3 o 4 días", set: { frecuencia: 4 } }, { label: "5 a 7 días", set: { frecuencia: 6 } }] },
+  { n: "8", key: "duracion", text: V.duracion.question, opts: [
+    { label: "Menos de 60 minutos", set: { duracion: 45 } }, { label: "60 a 89 minutos", set: { duracion: 75 } }, { label: "90 minutos o más", set: { duracion: 100 } }] },
+  { n: "9", key: "tipo_entrenamiento", text: V.tipo_entrenamiento.question, opts: optsOf("tipo_entrenamiento") },
+  { n: "10", key: "horario", text: V.horario.question, opts: optsOf("horario") },
+  { n: "11", key: "dieta", text: V.dieta.question, opts: optsOf("dieta") },
+  { n: "12", key: "proteina_dieta", text: V.proteina_dieta.question, opts: optsOf("proteina_dieta") },
+  { n: "13", key: "metabolismo", text: V.metabolismo.question, opts: optsOf("metabolismo") },
+  { n: "14", key: "salud", text: V.salud.question + " (selección múltiple)", opts: V.salud.options.map(([value, label]) => ({ label, set: { salud: [value] } })) },
+]
+const EXAMPLE = [1, 1, 1, 2, 1, 2, 1, 2, 2, 0, 0, 1, 0] // índice de respuesta por pregunta: perfil de ejemplo del manual
+const EXAMPLE_SALUD = ["ninguna"]
+
+// ─── Árbol de datos con hijos generados al abrir ─────────────────────────────
+function makeNode(parent, opt, extraLabel) {
+  const answers = { ...(parent ? parent.answers : {}), ...(opt ? opt.set : {}) }
+  const level = parent ? parent.level + 1 : 0
+  return { id: (parent ? parent.id + "/" : "") + (opt ? (extraLabel ?? opt.label) : "raiz"), parent, opt, answers, level,
+    label: extraLabel ?? (opt ? opt.label : null), open: false, kids: null, extra: [] }
+}
+const root = makeNode(null, null)
+function kids(n) {
+  if (n.level >= QUESTIONS.length) return []
+  if (!n.kids) n.kids = QUESTIONS[n.level].opts.map((o) => makeNode(n, o))
+  return n.kids.concat(n.extra)
+}
+const isLeaf = (n) => n.level >= QUESTIONS.length
+const cache = new Map()
+function result(n) {
+  if (!cache.has(n.id)) cache.set(n.id, infer(KB, { ...n.answers, presupuesto: 300000 }))
+  return cache.get(n.id)
+}
+function summarize(r) {
+  const seen = new Set(), rec = [], alt = []
+  for (const h of r.hypotheses) {
+    if (h.status !== "recommended") continue
+    const g = HN[h.code].group
+    if (g && seen.has(g)) { alt.push(h); continue }
+    if (g) seen.add(g)
+    rec.push(h)
+  }
+  return { rec, alt, opt: r.hypotheses.filter((h) => h.status === "optional"),
+    rej: r.hypotheses.filter((h) => h.status === "rejected"), advice: r.hypotheses.filter((h) => h.status === "advice") }
+}
+
+// ─── Dibujo ─────────────────────────────────────────────────────────────────
+const COLW = 330, GAP = 14
+const heights = new Map()
+let pathIds = new Set(), selected = null
+const nodesEl = document.getElementById("nodes"), linksEl = d3.select("#links")
+
+function nodeHTML(n) {
+  const ans = n.label ? `<div class="ans">${n.label}</div>` : ""
+  if (!isLeaf(n)) {
+    const q = QUESTIONS[n.level]
+    const count = kids(n).length
+    return `${ans}<div class="q"><span class="qn">P${q.n}</span>${q.text}</div>
+      <div class="meta">${count} respuestas · ${n.open ? "clic para cerrar" : "clic para abrir"}</div>`
+  }
+  const s = summarize(result(n))
+  const li = (h, cls = "") => `<li class="${cls}"><span>${HN[h.code].name}</span><span class="cf">${fmt(h.certainty)}</span></li>`
+  return `${ans}<div class="tag">Conclusión del sistema</div>
+    ${s.advice.length ? `<div class="warn-t">⚠ Consultar a un profesional de la salud</div>` : ""}
+    ${s.rec.length ? `<ul class="res">${s.rec.map((h) => li(h)).join("")}${s.alt.map((h) => li(h, "alt")).join("")}</ul>` : `<div class="meta">Ningún suplemento recomendado</div>`}
+    ${s.opt.length ? `<div class="tag">Opcionales</div><ul class="res">${s.opt.map((h) => li(h)).join("")}</ul>` : ""}
+    ${s.rej.length ? `<div class="tag">Descartados</div><div class="bad" style="font-size:12px">${s.rej.map((h) => HN[h.code].name).join(" · ")}</div>` : ""}
+    <div class="meta">P15 (presupuesto) solo decide qué productos comprar.</div>`
+}
+
+function render() {
+  const h = d3.hierarchy(root, (d) => (d.open ? kids(d) : null))
+  const nodes = h.descendants()
+  // Primera pasada: pintar para medir alturas reales.
+  nodesEl.innerHTML = ""
+  for (const d of nodes) {
+    const el = document.createElement("div")
+    const n = d.data
+    el.className = "node" + (n.level === 0 ? " root" : "") + (isLeaf(n) ? " leaf" : "") +
+      (isLeaf(n) && summarize(result(n)).advice.length ? " warn" : "") + (pathIds.has(n.id) ? " on" : "") + (selected === n ? " sel" : "")
+    el.innerHTML = nodeHTML(n)
+    el.tabIndex = 0
+    el.setAttribute("role", "button")
+    el.addEventListener("click", (e) => { e.stopPropagation(); onNode(n) })
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onNode(n) } })
+    nodesEl.appendChild(el)
+    d.el = el
+  }
+  for (const d of nodes) heights.set(d.data.id, d.el.offsetHeight)
+  d3.tree().nodeSize([1, COLW]).separation((a, b) => (heights.get(a.data.id) + heights.get(b.data.id)) / 2 + GAP)(h)
+  const minX = d3.min(nodes, (d) => d.x - heights.get(d.data.id) / 2)
+  let maxX = 0, maxY = 0
+  for (const d of nodes) {
+    const hh = heights.get(d.data.id)
+    d.top = d.x - hh / 2 - minX + 20
+    d.left = d.y + 20
+    d.el.style.left = d.left + "px"
+    d.el.style.top = d.top + "px"
+    maxX = Math.max(maxX, d.top + hh); maxY = Math.max(maxY, d.left + 320)
+  }
+  linksEl.attr("width", maxY + 40).attr("height", maxX + 40)
+  linksEl.selectAll("path").data(h.links()).join("path")
+    .attr("class", (l) => (pathIds.has(l.target.data.id) ? "on" : ""))
+    .attr("d", (l) => {
+      const sx = l.source.left + l.source.el.offsetWidth, sy = l.source.top + heights.get(l.source.data.id) / 2
+      const tx = l.target.left, ty = l.target.top + heights.get(l.target.data.id) / 2
+      const mx = (sx + tx) / 2
+      return `M${sx},${sy} C${mx},${sy} ${mx},${ty} ${tx},${ty}`
+    })
+  return nodes
+}
+
+// ─── Zoom y desplazamiento ───────────────────────────────────────────────────
+const viewport = d3.select("#viewport"), stage = document.getElementById("stage")
+const zoom = d3.zoom().scaleExtent([0.08, 2]).filter((e) => (e.type === "wheel" || !e.target.closest(".node")) && !e.button)
+  .on("zoom", (e) => { stage.style.transform = `translate(${e.transform.x}px,${e.transform.y}px) scale(${e.transform.k})` })
+viewport.call(zoom).on("dblclick.zoom", null)
+document.getElementById("btn-zoom-in").onclick = () => viewport.transition().duration(200).call(zoom.scaleBy, 1.25)
+document.getElementById("btn-zoom-out").onclick = () => viewport.transition().duration(200).call(zoom.scaleBy, 0.8)
+function fit() {
+  const w = +linksEl.attr("width"), hgt = +linksEl.attr("height")
+  const vw = viewport.node().clientWidth, vh = viewport.node().clientHeight
+  const k = Math.min(1, Math.max(0.08, Math.min((vw - 20) / w, (vh - 60) / hgt)))
+  viewport.transition().duration(300).call(zoom.transform, d3.zoomIdentity.translate(10, 50).scale(k))
+}
+document.getElementById("btn-fit").onclick = fit
+function focusOn(n) {
+  const d = render().find((x) => x.data === n)
+  if (!d) return
+  const t = d3.zoomTransform(viewport.node())
+  const vw = viewport.node().clientWidth, vh = viewport.node().clientHeight
+  const x = vw * 0.12 - d.left * t.k, y = vh / 2 - (d.top + heights.get(n.id) / 2) * t.k
+  viewport.transition().duration(300).call(zoom.transform, d3.zoomIdentity.translate(x, y).scale(t.k))
+}
+
+// ─── Interacción ─────────────────────────────────────────────────────────────
+function onNode(n) {
+  selected = n
+  if (!isLeaf(n)) n.open = !n.open
+  showResult(n)
+  focusOn(n)
+}
+function closeAll(n) { n.open = false; (n.kids || []).forEach(closeAll); n.extra = [] }
+document.getElementById("btn-collapse").onclick = () => { closeAll(root); pathIds = new Set(); selected = null; render(); fit() }
+
+// ─── Panel: seguir un camino ─────────────────────────────────────────────────
+const form = document.getElementById("path-form")
+form.style.display = "grid"; form.style.gap = "8px"
+QUESTIONS.forEach((q, i) => {
+  const f = document.createElement("div"); f.className = "field"
+  if (q.key === "salud") {
+    f.innerHTML = `<label><span class="num">P${q.n}</span>${V.salud.question}</label><div class="checks">${V.salud.options.map(([v, l]) =>
+      `<label><input type="checkbox" id="salud-${v}" value="${v}" ${EXAMPLE_SALUD.includes(v) ? "checked" : ""}>${l}</label>`).join("")}</div>`
+  } else {
+    f.innerHTML = `<label for="q-${q.key}"><span class="num">P${q.n}</span>${q.text}</label>
+      <select id="q-${q.key}">${q.opts.map((o, j) => `<option value="${j}" ${EXAMPLE[i] === j ? "selected" : ""}>${o.label}</option>`).join("")}</select>`
+  }
+  form.appendChild(f)
+})
+function formPath() {
+  const choice = QUESTIONS.slice(0, -1).map((q) => q.opts[+document.getElementById("q-" + q.key).value])
+  const salud = [...form.querySelectorAll(".checks input:checked")].map((c) => c.value)
+  return { choice, salud: salud.length ? (salud.length > 1 ? salud.filter((s) => s !== "ninguna") : salud) : ["ninguna"] }
+}
+function leafFromForm() {
+  const { choice, salud } = formPath()
+  let n = root
+  const ids = new Set([root.id])
+  for (const opt of choice) { n.open = true; n = kids(n).find((k) => k.opt === opt); ids.add(n.id) }
+  n.open = true
+  let leaf = kids(n).find((k) => JSON.stringify(k.opt.set.salud) === JSON.stringify(salud))
+  if (!leaf) {   // combinación de varias condiciones: se agrega como respuesta adicional
+    const label = salud.map((s) => V.salud.options.find((o) => o[0] === s)[1]).join(" + ")
+    leaf = makeNode(n, { label, set: { salud } }, label)
+    n.extra = [leaf]
+  }
+  ids.add(leaf.id)
+  return { leaf, ids }
+}
+function showResult(n) {
+  const card = document.getElementById("result-card")
+  const steps = []
+  for (let p = n; p && p.label; p = p.parent) steps.unshift(p.label)
+  if (!isLeaf(n)) {
+    card.innerHTML = `<div class="tag">Camino hasta aquí</div><div style="font-size:12.5px">${steps.join(" → ") || "Inicio"}</div>
+      <div class="tag">Siguiente pregunta</div><div style="font-size:12.5px">P${QUESTIONS[n.level].n} · ${QUESTIONS[n.level].text}</div>`
+    return
+  }
+  const r = result(n), s = summarize(r)
+  const facts = r.facts.map((f) => `<span>${V[f.code].name}: ${String(f.value).replace(/_/g, " ").replace(".", ",")}${f.certainty < 1 ? ` (${fmt(f.certainty)})` : ""}</span>`).join("")
+  card.innerHTML = `<div class="tag">Camino</div><div style="font-size:12.5px">${steps.join(" → ")}</div>
+    <div class="tag">Hechos que dedujo el sistema</div><div class="facts">${facts || "<span>Ninguno</span>"}</div>
+    <div class="tag">Conclusión</div>${nodeHTML({ ...n, label: null })}
+    <div class="meta">${r.firedRules.length} de ${KB.rules.length} reglas aplicadas · ${r.iterations} ciclos de inferencia</div>`
+}
+function openPath(focus = true) {
+  closeAll(root)
+  const { leaf, ids } = leafFromForm()
+  pathIds = ids; selected = leaf
+  showResult(leaf)
+  render()
+  if (focus) focusOn(leaf)
+}
+document.getElementById("btn-path").onclick = () => openPath()
+form.addEventListener("change", () => openPath())
+
+// Estado inicial: el perfil de ejemplo abierto, mostrando todas las respuestas de cada pregunta del camino.
+openPath(false)
+{
+  const r = render()[0], k = 0.6, vh = viewport.node().clientHeight
+  viewport.call(zoom.transform, d3.zoomIdentity.translate(16, vh / 2 - (r.top + heights.get(root.id) / 2) * k).scale(k))
+}
+</script>
+
+</body></html>
