@@ -7,10 +7,11 @@ Diseño e implementación del sistema de inferencia del sistema experto de recom
 **Contenido**
 
 1. [Código fuente del sistema experto completo](#código-fuente-del-sistema-experto-completo)
-2. [Diagrama de clases DAO y modelos de datos](#diagrama-de-clases-dao-y-modelos-de-datos)
-3. [Diagrama de caja negra](#1-diagrama-de-caja-negra)
-4. [Diagrama de flujo de datos (niveles 0 y 1)](#2-diagrama-de-flujo-de-datos)
-5. [Código fuente orientado a objetos en tres capas del sistema de inferencia](#3-código-fuente-oo-en-tres-capas)
+2. [Árbol de decisión](#árbol-de-decisión)
+3. [Diagrama de clases DAO y modelos de datos](#diagrama-de-clases-dao-y-modelos-de-datos)
+4. [Diagrama de caja negra](#1-diagrama-de-caja-negra)
+5. [Diagrama de flujo de datos (niveles 0 y 1)](#2-diagrama-de-flujo-de-datos)
+6. [Código fuente orientado a objetos en tres capas del sistema de inferencia](#3-código-fuente-oo-en-tres-capas)
 
 ---
 
@@ -46,6 +47,14 @@ base-de-datos/
 ```
 
 Los archivos de `src/` y `storefront/` necesitan el proyecto Medusa y Next.js de la tienda para ejecutarse; la [demostración](#ejecutar-la-demostración) corre sola, sin base de datos.
+
+## Árbol de decisión
+
+31 ramas; cada hoja es el resultado del motor de inferencia con su factor de certeza.
+
+![Árbol de decisión, ramas H1 a M6](diagramas/arbol-decision-1.png)
+
+![Árbol de decisión, ramas D1 a B5](diagramas/arbol-decision-2.png)
 
 ## Diagrama de clases DAO y modelos de datos
 
