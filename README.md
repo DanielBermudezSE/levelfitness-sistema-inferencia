@@ -50,11 +50,11 @@ Los archivos de `src/` y `storefront/` necesitan el proyecto Medusa y Next.js de
 
 ## Árbol de decisión
 
-31 ramas; cada hoja es el resultado del motor de inferencia con su factor de certeza.
+Muestra el flujo que sigue el sistema experto: el nodo raíz y los nodos de decisión son preguntas (recuadros verdes), cada rama lleva la respuesta y termina en la siguiente pregunta o en una hoja con la conclusión del motor y su factor de certeza (naranja: incluye aviso médico). Tiene 33 ramas; las ramas de un nodo se evalúan de arriba abajo.
 
-![Árbol de decisión, ramas H1 a M6](diagramas/arbol-decision-1.png)
+![Árbol de decisión: salud, ganar masa y bajar grasa](diagramas/arbol-decision-1.png)
 
-![Árbol de decisión, ramas D1 a B5](diagramas/arbol-decision-2.png)
+![Árbol de decisión: subárboles A a D](diagramas/arbol-decision-2.png)
 
 ## Diagrama de clases DAO y modelos de datos
 
@@ -227,4 +227,4 @@ En el backend de la tienda (Medusa v2 + PostgreSQL) el mismo código atiende `PO
 
 ## Validación
 
-El sistema granular se comparó con el motor original del sistema experto en las 31 ramas del árbol de decisión: los factores de certeza de las 19 hipótesis coinciden exactamente en todas las ramas.
+El sistema granular se comparó con el motor original del sistema experto en las 31 ramas originales del árbol de decisión y en las 2 ramas agregadas (M7 y R5): los factores de certeza de las 19 hipótesis coinciden exactamente en todas las ramas.
