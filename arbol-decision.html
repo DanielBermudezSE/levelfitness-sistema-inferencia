@@ -40,6 +40,7 @@ h1 { font-family: var(--display); font-size: 1.45rem; margin: 0; text-wrap: bala
 button { font: 600 12.5px var(--text); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; cursor: pointer }
 button:hover { border-color: var(--accent) } button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface) }
+.status { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 5; max-width: 62ch; background: var(--surface); border: 1px solid var(--accent); border-radius: 8px; padding: 8px 12px; font-size: 12.5px; box-shadow: 0 2px 10px rgb(0 0 0 / .12) }
 #viewport { position: absolute; inset: 0; cursor: grab; touch-action: none }
 #viewport:active { cursor: grabbing }
 #stage { position: absolute; left: 0; top: 0; transform-origin: 0 0 }
@@ -94,8 +95,10 @@ select { font: 13px var(--text); color: var(--ink); background: var(--bg); borde
       <button id="btn-zoom-in" type="button" aria-label="Acercar">+</button>
       <button id="btn-zoom-out" type="button" aria-label="Alejar">−</button>
       <button id="btn-fit" type="button">Ver todo lo abierto</button>
+      <button id="btn-expand" type="button">Abrir todas las ramas</button>
       <button id="btn-collapse" type="button">Cerrar todo</button>
     </div>
+    <div id="status" class="status" role="status" hidden></div>
     <div id="viewport"><div id="stage"><svg id="links"></svg><div id="nodes"></div></div></div>
   </section>
 
@@ -421,7 +424,8 @@ function render() {
     nodesEl.appendChild(el)
     d.el = el
   }
-  for (const d of nodes) heights.set(d.data.id, d.el.offsetHeight)
+  // Medir todo en una sola pasada (leer después de escribir forzaría un recálculo por recuadro).
+  for (const d of nodes) { heights.set(d.data.id, d.el.offsetHeight); d.w = d.el.offsetWidth }
   d3.tree().nodeSize([1, COLW]).separation((a, b) => (heights.get(a.data.id) + heights.get(b.data.id)) / 2 + GAP)(h)
   const minX = d3.min(nodes, (d) => d.x - heights.get(d.data.id) / 2)
   let maxX = 0, maxY = 0
@@ -437,7 +441,7 @@ function render() {
   linksEl.selectAll("path").data(h.links()).join("path")
     .attr("class", (l) => (pathIds.has(l.target.data.id) ? "on" : ""))
     .attr("d", (l) => {
-      const sx = l.source.left + l.source.el.offsetWidth, sy = l.source.top + heights.get(l.source.data.id) / 2
+      const sx = l.source.left + l.source.w, sy = l.source.top + heights.get(l.source.data.id) / 2
       const tx = l.target.left, ty = l.target.top + heights.get(l.target.data.id) / 2
       const mx = (sx + tx) / 2
       return `M${sx},${sy} C${mx},${sy} ${mx},${ty} ${tx},${ty}`
@@ -476,7 +480,55 @@ function onNode(n) {
   focusOn(n)
 }
 function closeAll(n) { n.open = false; (n.kids || []).forEach(closeAll); n.extra = [] }
-document.getElementById("btn-collapse").onclick = () => { closeAll(root); pathIds = new Set(); selected = null; render(); fit() }
+document.getElementById("btn-collapse").onclick = () => { closeAll(root); pathIds = new Set(); selected = null; showStatus(""); render(); fit() }
+
+// ─── Abrir todas las ramas ───────────────────────────────────────────────────
+// Abre nivel por nivel todas las respuestas debajo de la pregunta seleccionada (o de
+// la raíz) mientras el total de recuadros quepa en el navegador. El árbol completo
+// (55.427.328 caminos) no se puede dibujar a la vez.
+const MAX_NODES = 6000
+const visibleCount = () => d3.hierarchy(root, (d) => (d.open ? kids(d) : null)).descendants().length
+const statusEl = document.getElementById("status")
+function showStatus(text) { statusEl.textContent = text; statusEl.hidden = !text }
+function expandAll(start) {
+  let frontier = [start], visible = visibleCount(), levels = 0
+  while (frontier.length && !frontier.every(isLeaf)) {
+    const add = frontier.filter((n) => !isLeaf(n) && !n.open).reduce((s, n) => s + kids(n).length, 0)
+    if (visible + add > MAX_NODES) break
+    frontier.forEach((n) => { if (!isLeaf(n)) n.open = true })
+    visible += add; levels++
+    frontier = frontier.flatMap((n) => (isLeaf(n) ? [] : kids(n)))
+  }
+  const reachedLeaves = frontier.every(isLeaf)
+  const deepest = frontier[0]
+  return { levels, visible, reachedLeaves, nextQ: !reachedLeaves && deepest ? QUESTIONS[deepest.level] : null }
+}
+// Deja abierto solo el camino de la raíz a `start` (con las respuestas de cada pregunta
+// del camino) y cierra las demás ramas, para que el límite de recuadros se use en `start`.
+function focusBranch(start) {
+  if (start === root) return
+  const onPath = new Set()
+  for (let p = start; p; p = p.parent) onPath.add(p)
+  const walk = (n) => {
+    if (!onPath.has(n)) { closeAll(n); return }
+    if (n !== start) n.open = true
+    for (const k of (n.kids || []).concat(n.extra)) walk(k)
+  }
+  walk(root)
+}
+document.getElementById("btn-expand").onclick = () => {
+  const start = selected ? (isLeaf(selected) ? selected.parent : selected) : root
+  focusBranch(start)
+  const r = expandAll(start)
+  const desde = start === root ? "la raíz" : `«${start.label}»`
+  showStatus(r.reachedLeaves
+    ? `Se abrieron todas las ramas desde ${desde} hasta las conclusiones (${r.visible.toLocaleString("es-CO")} recuadros).`
+    : r.levels === 0
+      ? `Abrir el siguiente nivel desde ${desde} superaría ${MAX_NODES.toLocaleString("es-CO")} recuadros. Haz clic en una respuesta más abajo y vuelve a usar «Abrir todas las ramas».`
+      : `Se abrieron todas las ramas desde ${desde} hasta la pregunta P${r.nextQ.n} (${r.visible.toLocaleString("es-CO")} recuadros). Para seguir, haz clic en una respuesta y vuelve a usar «Abrir todas las ramas».`)
+  render()
+  fit()
+}
 
 // ─── Panel: seguir un camino ─────────────────────────────────────────────────
 const form = document.getElementById("path-form")
